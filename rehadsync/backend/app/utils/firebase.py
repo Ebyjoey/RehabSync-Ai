@@ -5,44 +5,45 @@ from typing import Any, Dict, List
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-
 from google.cloud.firestore_v1.client import Client
-from google.cloud.firestore_v1.base_document import (
-    BaseDocumentReference,
-    DocumentSnapshot,
-)
-from google.cloud.firestore_v1.stream_generator import StreamGenerator
 
 
-# Load Firebase credentials from Railway environment variable
-firebase_key: str | None = os.getenv("FIREBASE_KEY")
+# -----------------------------
+# Initialize Firebase
+# -----------------------------
+
+firebase_key = os.getenv("FIREBASE_KEY")
 
 if not firebase_key:
-    raise ValueError("FIREBASE_KEY environment variable not set")
+    raise RuntimeError("FIREBASE_KEY environment variable is not set")
+
+try:
+    firebase_dict = json.loads(firebase_key)
+except json.JSONDecodeError:
+    raise RuntimeError("FIREBASE_KEY is not valid JSON")
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(json.loads(firebase_key))
+    cred = credentials.Certificate(firebase_dict)
     firebase_admin.initialize_app(cred)
 
-# Firestore client with explicit type for static analysis
 db: Client = firestore.client()
 
 
-# Save Strava-synced activity
+# -----------------------------
+# Strava Activity
+# -----------------------------
 
 def save_strava_activity(user_id: str, activity: Dict[str, Any]) -> bool:
-    """Store a Strava activity for a user.
+    activity_id = activity.get("activity_id")
 
-    Returns True if the activity was saved, False if it already existed.
-    """
-    activity_id = activity["activity_id"]
+    if not activity_id:
+        raise ValueError("Activity must contain activity_id")
 
-    doc_ref: BaseDocumentReference = db.collection("strava_activities").document(activity_id)
-    doc: DocumentSnapshot = doc_ref.get()
+    doc_ref = db.collection("strava_activities").document(activity_id)
+    doc = doc_ref.get()
 
     if doc.exists:
-        # avoid duplicates
-        return False
+        return False  # duplicate
 
     doc_ref.set({
         "user_id": user_id,
@@ -53,18 +54,20 @@ def save_strava_activity(user_id: str, activity: Dict[str, Any]) -> bool:
     return True
 
 
+# -----------------------------
 # Leaderboard
+# -----------------------------
 
 def get_leaderboard() -> List[Dict[str, Any]]:
-    """Return top 50 users ordered by score."""
-    docs: StreamGenerator[DocumentSnapshot] = (
+    docs = (
         db.collection("users")
         .order_by("score", direction=firestore.Query.DESCENDING)
         .limit(50)
         .stream()
     )
 
-    leaderboard: List[Dict[str, Any]] = []
+    leaderboard = []
+
     for doc in docs:
         data = doc.to_dict() or {}
         leaderboard.append({
@@ -75,9 +78,11 @@ def get_leaderboard() -> List[Dict[str, Any]]:
     return leaderboard
 
 
-# Score calculation
+# -----------------------------
+# Score Calculation
+# -----------------------------
+
 def calculate_score(activity: Dict[str, Any]) -> float:
-    """Compute score based on steps and calories."""
     steps = activity.get("steps", 0)
     calories = activity.get("calories", 0)
 
@@ -85,10 +90,12 @@ def calculate_score(activity: Dict[str, Any]) -> float:
     return round(score, 2)
 
 
-# Update user score (optimized with Firestore increment)
+# -----------------------------
+# Update User Score
+# -----------------------------
+
 def update_user_score(user_id: str, score: float) -> None:
-    """Increment a user's leaderboard score by ``score``."""
-    user_ref: BaseDocumentReference = db.collection("users").document(user_id)
+    user_ref = db.collection("users").document(user_id)
 
     user_ref.set(
         {
@@ -99,19 +106,18 @@ def update_user_score(user_id: str, score: float) -> None:
     )
 
 
-# Save normal activity
-def log_activity(user_id: str, activity: Dict[str, Any]) -> None:
-    """Record a generic activity and update the user's score."""
-    steps = activity.get("steps", 0)
-    calories = activity.get("calories", 0)
+# -----------------------------
+# Log Activity
+# -----------------------------
 
+def log_activity(user_id: str, activity: Dict[str, Any]) -> None:
     score = calculate_score(activity)
 
     db.collection("activities").add(
         {
             "user_id": user_id,
-            "steps": steps,
-            "calories": calories,
+            "steps": activity.get("steps", 0),
+            "calories": activity.get("calories", 0),
             "score": score,
             "timestamp": datetime.utcnow(),
         }
