@@ -1,33 +1,25 @@
 import os
 import json
-from datetime import datetime
-from typing import Any, Dict, List
-
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google.cloud.firestore_v1.client import Client
 
-
-# -----------------------------
-# Initialize Firebase
-# -----------------------------
-
+# Load Firebase credentials from Railway environment variable
 firebase_key = os.getenv("FIREBASE_KEY")
 
 if not firebase_key:
-    raise RuntimeError("FIREBASE_KEY environment variable is not set")
+    raise ValueError("FIREBASE_KEY environment variable not set")
 
 try:
     firebase_dict = json.loads(firebase_key)
-except json.JSONDecodeError:
-    raise RuntimeError("FIREBASE_KEY is not valid JSON")
+except Exception as e:
+    raise ValueError("Invalid FIREBASE_KEY JSON format") from e
+
+cred = credentials.Certificate(firebase_dict)
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(firebase_dict)
     firebase_admin.initialize_app(cred)
 
-db: Client = firestore.client()
-
+db = firestore.client()
 
 # -----------------------------
 # Strava Activity
