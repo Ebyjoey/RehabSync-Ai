@@ -1,4 +1,4 @@
-**RehabSync AI**
+** RehabSync AI **
 
 Cloud-Deployed Rehabilitation Analytics Backend
 
