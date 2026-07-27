@@ -3,7 +3,6 @@
 Live Demo: https://rehabtrack.vercel.app/
 
 Cloud-deployed rehabilitation analytics backend built with FastAPI. RehabSync AI tracks user performance, integrates third-party APIs, and supports structured analytics for digital health applications.
-
 ---
 
 ## 🏗 Architecture Overview
